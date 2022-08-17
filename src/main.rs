@@ -1,4 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+mod errors;
+mod photo_set;
 
 use eframe::egui;
 
@@ -22,6 +24,13 @@ struct MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+            if ui.button("Load").clicked() {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    self.picked_path = Some(path.display().to_string());
+                }
+            }
+        });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label("Drag-and-drop files onto the window!");
 
