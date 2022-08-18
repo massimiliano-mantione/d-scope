@@ -1,9 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-    time::SystemTime,
-};
+use std::{collections::BTreeMap, path::PathBuf, time::SystemTime};
 
 use crate::errors::{DScopeError, DScopeResult};
 
@@ -188,7 +184,24 @@ impl PhotoSet {
     }
 
     pub fn save(&self) -> DScopeResult<()> {
-        todo!()
+        for photo in self.photos.iter() {
+            let mut path = self.path.clone();
+            path.push(photo_file_name(photo.id));
+            if !path.exists() {
+                std::fs::write(&path, &photo.bytes).map_err(|error| {
+                    DScopeError::cannot_write_file(error, path.to_string_lossy().to_string())
+                })?;
+            }
+        }
+
+        let data = serde_json::to_vec_pretty(&self.build_data()).unwrap();
+        let mut data_path = self.path.clone();
+        data_path.push(INFO_FILE_NAME);
+        std::fs::write(&data_path, data).map_err(|error| {
+            DScopeError::cannot_write_file(error, data_path.to_string_lossy().to_string())
+        })?;
+
+        Ok(())
     }
 
     fn apply_data(&mut self, data: PhotoSetData) {
