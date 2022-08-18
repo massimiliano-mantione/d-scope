@@ -5,7 +5,7 @@ use std::{
     time::SystemTime,
 };
 
-use crate::errors::DScopeResult;
+use crate::errors::{DScopeError, DScopeResult};
 
 const INFO_FILE_NAME: &str = "info.json";
 const PHOTO_FILE_NAME_PREFIX: &str = "PICT";
@@ -94,6 +94,17 @@ pub struct PhotoSetInfo {
     pub notes: String,
 }
 
+impl Default for PhotoSetInfo {
+    fn default() -> Self {
+        Self {
+            name: Default::default(),
+            surname: Default::default(),
+            time: std::time::SystemTime::now(),
+            notes: Default::default(),
+        }
+    }
+}
+
 pub struct PhotoSet {
     pub path: PathBuf,
     pub photos: Vec<Photo>,
@@ -102,7 +113,74 @@ pub struct PhotoSet {
 
 impl PhotoSet {
     pub fn from_path(path: PathBuf) -> DScopeResult<Self> {
-        todo!()
+        if !path.is_dir() {
+            return Err(DScopeError::expected_directory(
+                path.to_string_lossy().to_string(),
+            ));
+        }
+
+        let mut files = path.read_dir().map_err(|error| {
+            DScopeError::cannot_read_file(error, path.clone().to_string_lossy().to_string())
+        })?;
+        let mut photos = Vec::new();
+        for file in files.into_iter() {
+            let file = match file {
+                Ok(file) => file,
+                Err(_) => continue,
+            };
+            let id = match photo_file_id(&file.file_name().to_string_lossy().to_string()) {
+                Some(id) => id,
+                None => continue,
+            };
+
+            let metadata = file.metadata().map_err(|error| {
+                DScopeError::cannot_read_file(error, file.path().to_string_lossy().to_string())
+            })?;
+            if metadata.is_dir() {
+                continue;
+            }
+            if metadata.is_symlink() {
+                let symlink_metadata = std::fs::symlink_metadata(file.path()).map_err(|error| {
+                    DScopeError::cannot_read_file(error, file.path().to_string_lossy().to_string())
+                })?;
+                if !symlink_metadata.is_file() {
+                    continue;
+                }
+            }
+
+            let time = metadata.modified().map_err(|error| {
+                DScopeError::cannot_read_file(error, file.path().to_string_lossy().to_string())
+            })?;
+            let bytes = std::fs::read(file.path()).map_err(|error| {
+                DScopeError::cannot_read_file(error, file.path().to_string_lossy().to_string())
+            })?;
+
+            photos.push(Photo {
+                id,
+                bytes,
+                info: PhotoInfo::new(time),
+            })
+        }
+
+        let mut photo_set = PhotoSet {
+            path,
+            photos,
+            info: Default::default(),
+        };
+
+        let mut info_path = photo_set.path.clone();
+        info_path.push(INFO_FILE_NAME);
+        if info_path.exists() {
+            let info_text = std::fs::read_to_string(&info_path).map_err(|error| {
+                DScopeError::cannot_read_file(error, info_path.to_string_lossy().to_string())
+            })?;
+            let info_data = serde_json::from_str(&info_text).map_err(|error| {
+                DScopeError::cannot_decode_info(error, info_path.to_string_lossy().to_string())
+            })?;
+            photo_set.apply_data(info_data);
+        }
+
+        Ok(photo_set)
     }
 
     pub fn with_path(self, path: PathBuf) -> Self {
@@ -114,11 +192,29 @@ impl PhotoSet {
     }
 
     fn apply_data(&mut self, data: PhotoSetData) {
-        todo!()
+        self.info.name = data.name;
+        self.info.surname = data.surname;
+        self.info.time = data.time;
+        self.info.notes = data.notes;
+        for (id, info) in data.photos {
+            if let Some(photo) = self.photos.get_mut(id) {
+                photo.info.time = info.time;
+                photo.info.notes = info.notes;
+            }
+        }
     }
 
     fn build_data(&self) -> PhotoSetData {
-        todo!()
+        PhotoSetData {
+            name: self.info.name.clone(),
+            surname: self.info.surname.clone(),
+            time: self.info.time,
+            notes: self.info.notes.clone(),
+            photos: self.photos.iter().fold(BTreeMap::new(), |mut map, photo| {
+                map.insert(photo.id, photo.info.clone());
+                map
+            }),
+        }
     }
 }
 
