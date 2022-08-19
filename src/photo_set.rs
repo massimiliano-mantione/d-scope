@@ -1,3 +1,6 @@
+use eframe::epaint::ColorImage;
+use egui_extras::RetainedImage;
+use image::{load_from_memory, EncodableLayout, GenericImage};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf, time::SystemTime};
 
@@ -6,6 +9,7 @@ use crate::errors::{DScopeError, DScopeResult};
 const INFO_FILE_NAME: &str = "info.json";
 const PHOTO_FILE_NAME_PREFIX: &str = "PICT";
 const PHOTO_FILE_NAME_SUFFIX: &str = ".jpg";
+const PREVIEW_WIDTH: u32 = 128;
 
 fn photo_file_name(id: usize) -> String {
     format!(
@@ -79,6 +83,7 @@ impl PhotoInfo {
 pub struct Photo {
     pub id: usize,
     pub bytes: Vec<u8>,
+    pub preview: RetainedImage,
     pub info: PhotoInfo,
 }
 
@@ -151,9 +156,27 @@ impl PhotoSet {
                 DScopeError::cannot_read_file(error, file.path().to_string_lossy().to_string())
             })?;
 
+            let image = load_from_memory(&bytes)
+                .map_err(|error| DScopeError::cannot_decode_image(error, photo_file_name(id)))?;
+            let nheight = ((image.height() as f32)
+                * ((PREVIEW_WIDTH as f32) / (image.width() as f32)))
+                as u32;
+            let preview_image = image::imageops::resize(
+                &image,
+                PREVIEW_WIDTH,
+                nheight,
+                image::imageops::FilterType::Gaussian,
+            );
+            let preview_color_image = ColorImage::from_rgba_unmultiplied(
+                [PREVIEW_WIDTH as usize, nheight as usize],
+                preview_image.as_bytes(),
+            );
+            let preview = RetainedImage::from_color_image(photo_file_name(id), preview_color_image);
+
             photos.push(Photo {
                 id,
                 bytes,
+                preview,
                 info: PhotoInfo::new(time),
             })
         }
