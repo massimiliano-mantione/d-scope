@@ -4,7 +4,11 @@ mod photo_set;
 
 use std::path::PathBuf;
 
-use eframe::egui::{self, ImageButton};
+use eframe::egui::{
+    self,
+    plot::{Plot, PlotImage, Value},
+    ImageButton,
+};
 use egui_extras::RetainedImage;
 use errors::DScopeError;
 use photo_set::{photo_file_name, PhotoSet};
@@ -157,11 +161,21 @@ impl eframe::App for MyApp {
                 });
 
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    let size = current_photo.size();
-                    ui.image(
-                        current_photo.texture_id(ctx),
-                        [size[0] as f32, size[1] as f32],
-                    );
+                    Plot::new("main-panel")
+                        .data_aspect(1.0)
+                        .allow_zoom(true)
+                        .allow_scroll(true)
+                        .allow_drag(true)
+                        .show_axes([false, false])
+                        .show(ui, |ui| {
+                            let size = current_photo.size();
+                            let image = PlotImage::new(
+                                current_photo.texture_id(ctx),
+                                Value::new(0.0, 0.0),
+                                [size[0] as f32, size[1] as f32],
+                            );
+                            ui.image(image);
+                        });
                 });
             }
         }
