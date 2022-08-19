@@ -1,6 +1,6 @@
 use eframe::epaint::ColorImage;
 use egui_extras::RetainedImage;
-use image::{load_from_memory, EncodableLayout, GenericImage};
+use image::{load_from_memory, EncodableLayout};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf, time::SystemTime};
 
@@ -129,6 +129,7 @@ impl PhotoSet {
                 Ok(file) => file,
                 Err(_) => continue,
             };
+
             let id = match photo_file_id(&file.file_name().to_string_lossy().to_string()) {
                 Some(id) => id,
                 None => continue,
@@ -165,7 +166,7 @@ impl PhotoSet {
                 &image,
                 PREVIEW_WIDTH,
                 nheight,
-                image::imageops::FilterType::Gaussian,
+                image::imageops::FilterType::Nearest,
             );
             let preview_color_image = ColorImage::from_rgba_unmultiplied(
                 [PREVIEW_WIDTH as usize, nheight as usize],
@@ -206,10 +207,6 @@ impl PhotoSet {
         }
 
         Ok(photo_set)
-    }
-
-    pub fn with_path(self, path: PathBuf) -> Self {
-        Self { path, ..self }
     }
 
     pub fn save(&self) -> DScopeResult<()> {

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use eframe::egui::{self, ImageButton};
 use egui_extras::RetainedImage;
-use errors::{DScopeError, DScopeResult};
+use errors::DScopeError;
 use photo_set::{photo_file_name, PhotoSet};
 
 fn main() {
@@ -81,11 +81,13 @@ impl eframe::App for MyApp {
         match &mut self.status.ui {
             DScopeUi::Empty => {
                 egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-                    if ui.button("Load").clicked() {
-                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.status.load = Some(path);
+                    ui.horizontal(|ui| {
+                        if ui.button("Load").clicked() {
+                            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                self.status.load = Some(path);
+                            }
                         }
-                    }
+                    })
                 });
             }
             DScopeUi::Show {
@@ -94,29 +96,31 @@ impl eframe::App for MyApp {
                 current_photo,
             } => {
                 egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-                    if ui.button("Load").clicked() {
-                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.status.load = Some(path);
+                    ui.horizontal(|ui| {
+                        if ui.button("Load").clicked() {
+                            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                self.status.load = Some(path);
+                            }
                         }
-                    }
-                    if ui.button("Save").clicked() {
-                        if let Err(error) = photos.save() {
-                            self.status.error = Some(error);
+                        if ui.button("Save").clicked() {
+                            if let Err(error) = photos.save() {
+                                self.status.error = Some(error);
+                            }
                         }
-                    }
-                    if ui.button("Save as").clicked() {
-                        if let Some(new_path) = rfd::FileDialog::new().pick_folder() {
-                            let old_path = photos.path.clone();
-                            photos.path = new_path;
-                            match photos.save() {
-                                Ok(_) => {}
-                                Err(error) => {
-                                    photos.path = old_path;
-                                    self.status.error = Some(error);
+                        if ui.button("Save as").clicked() {
+                            if let Some(new_path) = rfd::FileDialog::new().pick_folder() {
+                                let old_path = photos.path.clone();
+                                photos.path = new_path;
+                                match photos.save() {
+                                    Ok(_) => {}
+                                    Err(error) => {
+                                        photos.path = old_path;
+                                        self.status.error = Some(error);
+                                    }
                                 }
                             }
                         }
-                    }
+                    })
                 });
 
                 egui::SidePanel::left("photo-list").show(ctx, |ui| {
@@ -150,6 +154,14 @@ impl eframe::App for MyApp {
                             }
                         }
                     });
+                });
+
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let size = current_photo.size();
+                    ui.image(
+                        current_photo.texture_id(ctx),
+                        [size[0] as f32, size[1] as f32],
+                    );
                 });
             }
         }

@@ -45,7 +45,7 @@ impl std::error::Error for DScopeError {}
 
 impl DScopeError {
     pub fn no_photos_found(path: String) -> Self {
-        Self::ExpectedDirectory { path }
+        Self::NoPhotosFound { path }
     }
     pub fn expected_directory(path: String) -> Self {
         Self::ExpectedDirectory { path }
