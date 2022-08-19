@@ -11,7 +11,7 @@ const PHOTO_FILE_NAME_PREFIX: &str = "PICT";
 const PHOTO_FILE_NAME_SUFFIX: &str = ".jpg";
 const PREVIEW_WIDTH: u32 = 128;
 
-fn photo_file_name(id: usize) -> String {
+pub fn photo_file_name(id: usize) -> String {
     format!(
         "{}{:04}{}",
         PHOTO_FILE_NAME_PREFIX, id, PHOTO_FILE_NAME_SUFFIX
@@ -26,7 +26,7 @@ fn test_photo_file_name() {
     assert_eq!(&photo_file_name(42), "PICT0042.jpg");
 }
 
-fn photo_file_id(name: &str) -> Option<usize> {
+pub fn photo_file_id(name: &str) -> Option<usize> {
     if name.len() < 12 {
         return None;
     }
@@ -120,7 +120,7 @@ impl PhotoSet {
             ));
         }
 
-        let mut files = path.read_dir().map_err(|error| {
+        let files = path.read_dir().map_err(|error| {
             DScopeError::cannot_read_file(error, path.clone().to_string_lossy().to_string())
         })?;
         let mut photos = Vec::new();
@@ -179,6 +179,12 @@ impl PhotoSet {
                 preview,
                 info: PhotoInfo::new(time),
             })
+        }
+
+        if photos.len() == 0 {
+            return Err(DScopeError::no_photos_found(
+                path.to_string_lossy().to_string(),
+            ));
         }
 
         let mut photo_set = PhotoSet {

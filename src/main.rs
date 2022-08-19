@@ -2,7 +2,12 @@
 mod errors;
 mod photo_set;
 
-use eframe::egui;
+use std::path::PathBuf;
+
+use eframe::egui::{self, ImageButton};
+use egui_extras::RetainedImage;
+use errors::{DScopeError, DScopeResult};
+use photo_set::{photo_file_name, PhotoSet};
 
 fn main() {
     let options = eframe::NativeOptions {
@@ -16,97 +21,137 @@ fn main() {
     );
 }
 
-#[derive(Default)]
-struct MyApp {
-    dropped_files: Vec<egui::DroppedFile>,
-    picked_path: Option<String>,
+enum DScopeUi {
+    Empty,
+    Show {
+        photos: PhotoSet,
+        current_photo_index: usize,
+        current_photo: RetainedImage,
+    },
 }
 
-impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            if ui.button("Load").clicked() {
-                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                    self.picked_path = Some(path.display().to_string());
-                }
-            }
-        });
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("Drag-and-drop files onto the window!");
+struct DScopeStatus {
+    pub error: Option<DScopeError>,
+    pub load: Option<PathBuf>,
+    pub ui: DScopeUi,
+}
 
-            if ui.button("Open file…").clicked() {
-                if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    self.picked_path = Some(path.display().to_string());
-                }
-            }
+struct MyApp {
+    status: DScopeStatus,
+}
 
-            if let Some(picked_path) = &self.picked_path {
-                ui.horizontal(|ui| {
-                    ui.label("Picked file:");
-                    ui.monospace(picked_path);
-                });
-            }
-
-            // Show dropped files (if any):
-            if !self.dropped_files.is_empty() {
-                ui.group(|ui| {
-                    ui.label("Dropped files:");
-
-                    for file in &self.dropped_files {
-                        let mut info = if let Some(path) = &file.path {
-                            path.display().to_string()
-                        } else if !file.name.is_empty() {
-                            file.name.clone()
-                        } else {
-                            "???".to_owned()
-                        };
-                        if let Some(bytes) = &file.bytes {
-                            use std::fmt::Write as _;
-                            write!(info, " ({} bytes)", bytes.len()).ok();
-                        }
-                        ui.label(info);
-                    }
-                });
-            }
-        });
-
-        preview_files_being_dropped(ctx);
-
-        // Collect dropped files:
-        if !ctx.input().raw.dropped_files.is_empty() {
-            self.dropped_files = ctx.input().raw.dropped_files.clone();
+impl Default for MyApp {
+    fn default() -> Self {
+        Self {
+            status: DScopeStatus {
+                error: None,
+                load: None,
+                ui: DScopeUi::Empty,
+            },
         }
     }
 }
 
-/// Preview hovering files:
-fn preview_files_being_dropped(ctx: &egui::Context) {
-    use egui::*;
-    use std::fmt::Write as _;
-
-    if !ctx.input().raw.hovered_files.is_empty() {
-        let mut text = "Dropping files:\n".to_owned();
-        for file in &ctx.input().raw.hovered_files {
-            if let Some(path) = &file.path {
-                write!(text, "\n{}", path.display()).ok();
-            } else if !file.mime.is_empty() {
-                write!(text, "\n{}", file.mime).ok();
-            } else {
-                text += "\n???";
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(error) = self.status.error.take() {
+            error.show();
+        }
+        if let Some(path) = self.status.load.take() {
+            match PhotoSet::from_path(path) {
+                Ok(photos) => {
+                    match RetainedImage::from_image_bytes("selected-photo", &photos.photos[0].bytes)
+                    {
+                        Ok(current_photo) => {
+                            self.status.ui = DScopeUi::Show {
+                                photos,
+                                current_photo_index: 0,
+                                current_photo,
+                            };
+                        }
+                        Err(error) => {
+                            self.status.error =
+                                Some(DScopeError::cannot_create_image(error, photo_file_name(0)))
+                        }
+                    }
+                }
+                Err(error) => self.status.error = Some(error),
             }
         }
+        match &mut self.status.ui {
+            DScopeUi::Empty => {
+                egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+                    if ui.button("Load").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                            self.status.load = Some(path);
+                        }
+                    }
+                });
+            }
+            DScopeUi::Show {
+                photos,
+                current_photo_index,
+                current_photo,
+            } => {
+                egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+                    if ui.button("Load").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                            self.status.load = Some(path);
+                        }
+                    }
+                    if ui.button("Save").clicked() {
+                        if let Err(error) = photos.save() {
+                            self.status.error = Some(error);
+                        }
+                    }
+                    if ui.button("Save as").clicked() {
+                        if let Some(new_path) = rfd::FileDialog::new().pick_folder() {
+                            let old_path = photos.path.clone();
+                            photos.path = new_path;
+                            match photos.save() {
+                                Ok(_) => {}
+                                Err(error) => {
+                                    photos.path = old_path;
+                                    self.status.error = Some(error);
+                                }
+                            }
+                        }
+                    }
+                });
 
-        let painter =
-            ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
-
-        let screen_rect = ctx.input().screen_rect();
-        painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));
-        painter.text(
-            screen_rect.center(),
-            Align2::CENTER_CENTER,
-            text,
-            TextStyle::Heading.resolve(&ctx.style()),
-            Color32::WHITE,
-        );
+                egui::SidePanel::left("photo-list").show(ctx, |ui| {
+                    ui.vertical(|ui| {
+                        for (index, photo) in photos.photos.iter().enumerate() {
+                            let size = photo.preview.size();
+                            let button = ImageButton::new(
+                                photo.preview.texture_id(ctx),
+                                [size[0] as f32, size[1] as f32],
+                            )
+                            .selected(index == *current_photo_index);
+                            if ui.add(button).clicked() {
+                                if *current_photo_index != index {
+                                    match RetainedImage::from_image_bytes(
+                                        "selected-photo",
+                                        &photos.photos[index].bytes,
+                                    ) {
+                                        Ok(new_photo) => {
+                                            *current_photo_index = index;
+                                            *current_photo = new_photo;
+                                        }
+                                        Err(error) => {
+                                            self.status.error =
+                                                Some(DScopeError::cannot_create_image(
+                                                    error,
+                                                    photo_file_name(index),
+                                                ))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+        }
     }
 }
