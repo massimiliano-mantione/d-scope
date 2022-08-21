@@ -2,16 +2,21 @@
 mod errors;
 mod photo_set;
 
-use std::path::PathBuf;
+use std::{f32::consts::PI, path::PathBuf};
 
-use eframe::egui::{
-    self,
-    plot::{Plot, PlotImage, Value},
-    ImageButton,
+use eframe::{
+    egui::{
+        self,
+        plot::{Line, Plot, PlotImage, Value, Values},
+        ImageButton, Slider,
+    },
+    epaint::{Color32, Stroke},
 };
 use egui_extras::RetainedImage;
 use errors::DScopeError;
-use photo_set::{photo_file_name, PhotoSet};
+use photo_set::{
+    photo_file_name, PhotoSet, MOLE_CENTER_DISTANCE_MAX, MOLE_SIZE_MAX, PHOTO_PX_PER_MM,
+};
 
 fn main() {
     let options = eframe::NativeOptions {
@@ -31,6 +36,9 @@ enum DScopeUi {
         photos: PhotoSet,
         current_photo_index: usize,
         current_photo: RetainedImage,
+        show_measures: bool,
+        edit: bool,
+        needs_save: bool,
     },
 }
 
@@ -71,6 +79,9 @@ impl eframe::App for MyApp {
                                 photos,
                                 current_photo_index: 0,
                                 current_photo,
+                                show_measures: false,
+                                edit: false,
+                                needs_save: false,
                             };
                         }
                         Err(error) => {
@@ -98,31 +109,89 @@ impl eframe::App for MyApp {
                 photos,
                 current_photo_index,
                 current_photo,
+                show_measures,
+                edit,
+                needs_save,
             } => {
                 egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        if ui.button("Load").clicked() {
-                            if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                self.status.load = Some(path);
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("Load").clicked() {
+                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    self.status.load = Some(path);
+                                }
                             }
-                        }
-                        if ui.button("Save").clicked() {
-                            if let Err(error) = photos.save() {
-                                self.status.error = Some(error);
+                            if ui.button("Save").clicked() {
+                                if let Err(error) = photos.save() {
+                                    self.status.error = Some(error);
+                                }
                             }
-                        }
-                        if ui.button("Save as").clicked() {
-                            if let Some(new_path) = rfd::FileDialog::new().pick_folder() {
-                                let old_path = photos.path.clone();
-                                photos.path = new_path;
-                                match photos.save() {
-                                    Ok(_) => {}
-                                    Err(error) => {
-                                        photos.path = old_path;
-                                        self.status.error = Some(error);
+                            if ui.button("Save as").clicked() {
+                                if let Some(new_path) = rfd::FileDialog::new().pick_folder() {
+                                    let old_path = photos.path.clone();
+                                    photos.path = new_path;
+                                    match photos.save() {
+                                        Ok(_) => {}
+                                        Err(error) => {
+                                            photos.path = old_path;
+                                            self.status.error = Some(error);
+                                        }
                                     }
                                 }
                             }
+
+                            ui.separator();
+
+                            ui.checkbox(show_measures, "Metrics");
+                        });
+
+                        if *edit || *show_measures {
+                            let current_photo_info = &mut photos.photos[*current_photo_index];
+
+                            if *edit {
+                                ui.label("Visit");
+                                ui.horizontal(|ui| {
+                                    ui.label("Surname");
+                                    ui.text_edit_singleline(&mut photos.info.surname);
+                                    ui.separator();
+                                    ui.label("Name");
+                                    ui.text_edit_singleline(&mut photos.info.name);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Notes");
+                                    ui.text_edit_multiline(&mut photos.info.notes);
+                                });
+                                ui.separator();
+                            }
+
+                            ui.horizontal(|ui| {
+                                ui.label("X");
+                                ui.add(
+                                    Slider::new(
+                                        &mut current_photo_info.info.mole_metrics.center_x,
+                                        -MOLE_CENTER_DISTANCE_MAX..=MOLE_CENTER_DISTANCE_MAX,
+                                    )
+                                    .clamp_to_range(true),
+                                );
+                                ui.label("Y");
+                                ui.separator();
+                                ui.add(
+                                    Slider::new(
+                                        &mut current_photo_info.info.mole_metrics.center_y,
+                                        -MOLE_CENTER_DISTANCE_MAX..=MOLE_CENTER_DISTANCE_MAX,
+                                    )
+                                    .clamp_to_range(true),
+                                );
+                                ui.label("Size");
+                                ui.separator();
+                                ui.add(
+                                    Slider::new(
+                                        &mut current_photo_info.info.mole_metrics.diameter,
+                                        0.0..=MOLE_SIZE_MAX,
+                                    )
+                                    .clamp_to_range(true),
+                                );
+                            });
                         }
                     })
                 });
@@ -161,23 +230,81 @@ impl eframe::App for MyApp {
                 });
 
                 egui::CentralPanel::default().show(ctx, |ui| {
+                    let unlock_movement = !*show_measures;
+
                     Plot::new("main-panel")
                         .data_aspect(1.0)
-                        .allow_zoom(true)
-                        .allow_scroll(true)
-                        .allow_drag(true)
+                        .allow_zoom(unlock_movement)
+                        .allow_scroll(unlock_movement)
+                        .allow_drag(unlock_movement)
                         .show_axes([false, false])
-                        .show(ui, |ui| {
+                        .show(ui, |plot| {
                             let size = current_photo.size();
                             let image = PlotImage::new(
                                 current_photo.texture_id(ctx),
                                 Value::new(0.0, 0.0),
-                                [size[0] as f32, size[1] as f32],
+                                [
+                                    size[0] as f32 / PHOTO_PX_PER_MM,
+                                    size[1] as f32 / PHOTO_PX_PER_MM,
+                                ],
                             );
-                            ui.image(image);
+                            plot.image(image);
+
+                            if *show_measures {
+                                let current_photo_info = &mut photos.photos[*current_photo_index];
+
+                                plot.line(
+                                    Line::new(Values::from_values_iter(circle(
+                                        current_photo_info.info.mole_metrics.center_x,
+                                        current_photo_info.info.mole_metrics.center_y,
+                                        current_photo_info.info.mole_metrics.diameter / 2.0,
+                                        64,
+                                    )))
+                                    .stroke(Stroke::new(3.0, Color32::WHITE)),
+                                );
+
+                                if let Some(point) = plot.pointer_coordinate() {
+                                    let px = point.x as f32;
+                                    let py = point.y as f32;
+
+                                    if plot.plot_clicked() {
+                                        current_photo_info.info.mole_metrics.center_x = px;
+                                        current_photo_info.info.mole_metrics.center_y = py;
+                                    }
+
+                                    let drag = plot.pointer_coordinate_drag_delta();
+                                    if (drag[0] != 0.0 || drag[1] != 0.0) {
+                                        let p2_x = px;
+                                        let p2_y = py;
+                                        let p1_x = px - drag[0];
+                                        let p1_y = py - drag[1];
+                                        let cx = current_photo_info.info.mole_metrics.center_x;
+                                        let cy = current_photo_info.info.mole_metrics.center_y;
+
+                                        let r2 =
+                                            ((p2_x - cx).powf(2.0) + (p2_y - cy).powf(2.0)).sqrt();
+                                        let r1 =
+                                            ((p1_x - cx).powf(2.0) + (p1_y - cy).powf(2.0)).sqrt();
+
+                                        current_photo_info.info.mole_metrics.diameter +=
+                                            2.0 * (r2 - r1);
+                                    }
+                                }
+                            }
                         });
                 });
             }
         }
     }
+}
+
+fn circle(x: f32, y: f32, r: f32, n: usize) -> impl Iterator<Item = Value> {
+    let arc = if n == 0 { PI } else { 2.0 * PI / (n as f32) };
+    (0..=n)
+        .into_iter()
+        .map(move |i| i as f32 * arc)
+        .map(move |arc| Value {
+            x: (x + (r * arc.cos())) as f64,
+            y: (y + (r * arc.sin())) as f64,
+        })
 }

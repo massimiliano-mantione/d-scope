@@ -11,6 +11,10 @@ const PHOTO_FILE_NAME_PREFIX: &str = "PICT";
 const PHOTO_FILE_NAME_SUFFIX: &str = ".jpg";
 const PREVIEW_WIDTH: u32 = 128;
 
+pub const MOLE_CENTER_DISTANCE_MAX: f32 = 2.0;
+pub const MOLE_SIZE_MAX: f32 = 4.0;
+pub const PHOTO_PX_PER_MM: f32 = 1250.0;
+
 pub fn photo_file_name(id: usize) -> String {
     format!(
         "{}{:04}{}",
@@ -65,10 +69,28 @@ fn test_photo_file_id() {
     assert_eq!(photo_file_id("PICT000.jpg"), None);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MoleMetrics {
+    pub center_x: f32,
+    pub center_y: f32,
+    pub diameter: f32,
+}
+
+impl MoleMetrics {
+    pub fn size(&self) -> Option<f32> {
+        if self.diameter > 0.0 {
+            Some(self.diameter)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PhotoInfo {
     pub time: SystemTime,
     pub notes: String,
+    pub mole_metrics: MoleMetrics,
 }
 
 impl PhotoInfo {
@@ -76,6 +98,7 @@ impl PhotoInfo {
         Self {
             time,
             notes: String::new(),
+            mole_metrics: Default::default(),
         }
     }
 }
@@ -87,7 +110,7 @@ pub struct Photo {
     pub info: PhotoInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PhotoSetInfo {
     pub name: String,
     pub surname: String,
@@ -257,7 +280,7 @@ impl PhotoSet {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PhotoSetData {
     pub name: String,
     pub surname: String,
