@@ -70,7 +70,7 @@ fn test_photo_file_id() {
     assert_eq!(photo_file_id("PICT000.jpg"), None);
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct MoleMetrics {
     pub center_x: f32,
     pub center_y: f32,
@@ -212,6 +212,8 @@ impl PhotoSet {
             ));
         }
 
+        photos.sort_by(|a, b| a.id.cmp(&b.id));
+
         let mut photo_set = PhotoSet {
             path,
             photos,
@@ -228,6 +230,10 @@ impl PhotoSet {
                 DScopeError::cannot_decode_info(error, info_path.to_string_lossy().to_string())
             })?;
             photo_set.apply_data(info_data);
+        }
+
+        for p in photo_set.photos.iter() {
+            println!("p {}, s {}", p.id, p.info.mole_metrics.diameter);
         }
 
         Ok(photo_set)
@@ -260,9 +266,11 @@ impl PhotoSet {
         self.info.time = data.time;
         self.info.notes = data.notes;
         for (id, info) in data.photos {
-            if let Some(photo) = self.photos.get_mut(id) {
+            if let Some((index, _)) = self.photos.iter().enumerate().find(|(_, p)| p.id == id) {
+                let photo = &mut self.photos[index];
                 photo.info.time = info.time;
                 photo.info.notes = info.notes;
+                photo.info.mole_metrics = info.mole_metrics;
             }
         }
     }

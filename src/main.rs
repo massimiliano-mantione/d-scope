@@ -135,9 +135,6 @@ impl eframe::App for MyApp {
                                     self.status.load = Some(path);
                                 }
                             }
-                            if ui.button("Save").clicked() {
-                                *save = true;
-                            }
                             if ui.button("Save as").clicked() {
                                 if let Some(new_path) = rfd::FileDialog::new().pick_folder() {
                                     let old_path = photos.path.clone();
@@ -285,12 +282,12 @@ impl eframe::App for MyApp {
                 });
 
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    let unlock_movement = !*show_measures;
+                    let unlock_movement = !*edit_measures;
 
                     Plot::new("main-panel")
                         .data_aspect(1.0)
                         .allow_zoom(unlock_movement)
-                        .allow_scroll(unlock_movement)
+                        .allow_scroll(false)
                         .allow_drag(unlock_movement)
                         .show_axes([false, false])
                         .show(ui, |plot| {
@@ -306,8 +303,7 @@ impl eframe::App for MyApp {
                             plot.image(image);
 
                             if *show_measures {
-                                let current_photo_info = &mut photos.photos[*current_photo_index];
-
+                                let current_photo_info = &photos.photos[*current_photo_index];
                                 plot.line(
                                     Line::new(Values::from_values_iter(circle(
                                         current_photo_info.info.mole_metrics.center_x,
@@ -317,6 +313,10 @@ impl eframe::App for MyApp {
                                     )))
                                     .stroke(Stroke::new(3.0, Color32::WHITE)),
                                 );
+                            }
+
+                            if *edit_measures {
+                                let current_photo_info = &mut photos.photos[*current_photo_index];
 
                                 if let Some(point) = plot.pointer_coordinate() {
                                     let px = point.x as f32;
