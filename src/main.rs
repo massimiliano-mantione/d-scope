@@ -8,14 +8,15 @@ use eframe::{
     egui::{
         self,
         plot::{Line, Plot, PlotImage, Value, Values},
-        ImageButton, Slider,
+        Button, ImageButton, Slider,
     },
     epaint::{Color32, Stroke},
 };
 use egui_extras::RetainedImage;
 use errors::DScopeError;
 use photo_set::{
-    photo_file_name, PhotoSet, MOLE_CENTER_DISTANCE_MAX, MOLE_SIZE_MAX, PHOTO_PX_PER_MM,
+    photo_file_name, DisplayTime, PhotoSet, MOLE_CENTER_DISTANCE_MAX, MOLE_SIZE_MAX,
+    PHOTO_PX_PER_MM,
 };
 
 fn main() {
@@ -37,8 +38,9 @@ enum DScopeUi {
         current_photo_index: usize,
         current_photo: RetainedImage,
         show_measures: bool,
-        edit: bool,
-        needs_save: bool,
+        edit_measures: bool,
+        edit_data: bool,
+        save: bool,
     },
 }
 
@@ -80,8 +82,9 @@ impl eframe::App for MyApp {
                                 current_photo_index: 0,
                                 current_photo,
                                 show_measures: false,
-                                edit: false,
-                                needs_save: false,
+                                edit_measures: false,
+                                edit_data: false,
+                                save: false,
                             };
                         }
                         Err(error) => {
@@ -110,9 +113,20 @@ impl eframe::App for MyApp {
                 current_photo_index,
                 current_photo,
                 show_measures,
-                edit,
-                needs_save,
+                edit_measures,
+                edit_data,
+                save,
             } => {
+                if *save {
+                    *save = false;
+                    if let Err(error) = photos.save() {
+                        self.status.error = Some(error);
+                    } else {
+                        *edit_measures = false;
+                        *edit_data = false;
+                    }
+                }
+
                 egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
@@ -122,9 +136,7 @@ impl eframe::App for MyApp {
                                 }
                             }
                             if ui.button("Save").clicked() {
-                                if let Err(error) = photos.save() {
-                                    self.status.error = Some(error);
-                                }
+                                *save = true;
                             }
                             if ui.button("Save as").clicked() {
                                 if let Some(new_path) = rfd::FileDialog::new().pick_folder() {
@@ -143,12 +155,44 @@ impl eframe::App for MyApp {
                             ui.separator();
 
                             ui.checkbox(show_measures, "Metrics");
+                            if *show_measures {
+                                if ui
+                                    .add_enabled(!*edit_measures, Button::new("Edit measures"))
+                                    .clicked()
+                                {
+                                    *edit_measures = true;
+                                }
+                            }
+                            if ui
+                                .add_enabled(!*edit_data, Button::new("Edit data"))
+                                .clicked()
+                            {
+                                *edit_data = true;
+                            }
+
+                            ui.separator();
+
+                            let current_photo_info = &photos.photos[*current_photo_index];
+                            if photos.info.surname.len() > 0 {
+                                ui.label(&photos.info.surname);
+                            }
+                            if photos.info.name.len() > 0 {
+                                ui.label(&photos.info.name);
+                            }
+                            ui.label(format!("[{}]", current_photo_info.id));
+                            ui.label(format!(
+                                "{}",
+                                DisplayTime::new(current_photo_info.info.time)
+                            ));
+                            if let Some(size) = current_photo_info.info.mole_metrics.size() {
+                                ui.label(format!("(size {} mm)", size));
+                            }
                         });
 
-                        if *edit || *show_measures {
+                        if *edit_data || *edit_measures {
                             let current_photo_info = &mut photos.photos[*current_photo_index];
 
-                            if *edit {
+                            if *edit_data {
                                 ui.label("Visit");
                                 ui.horizontal(|ui| {
                                     ui.label("Surname");
@@ -161,37 +205,48 @@ impl eframe::App for MyApp {
                                     ui.label("Notes");
                                     ui.text_edit_multiline(&mut photos.info.notes);
                                 });
-                                ui.separator();
+                                if !*edit_measures {
+                                    if ui.button("Save").clicked() {
+                                        *save = true;
+                                    }
+                                }
                             }
 
-                            ui.horizontal(|ui| {
-                                ui.label("X");
-                                ui.add(
-                                    Slider::new(
-                                        &mut current_photo_info.info.mole_metrics.center_x,
-                                        -MOLE_CENTER_DISTANCE_MAX..=MOLE_CENTER_DISTANCE_MAX,
-                                    )
-                                    .clamp_to_range(true),
-                                );
-                                ui.label("Y");
+                            if *edit_measures {
                                 ui.separator();
-                                ui.add(
-                                    Slider::new(
-                                        &mut current_photo_info.info.mole_metrics.center_y,
-                                        -MOLE_CENTER_DISTANCE_MAX..=MOLE_CENTER_DISTANCE_MAX,
-                                    )
-                                    .clamp_to_range(true),
-                                );
-                                ui.label("Size");
-                                ui.separator();
-                                ui.add(
-                                    Slider::new(
-                                        &mut current_photo_info.info.mole_metrics.diameter,
-                                        0.0..=MOLE_SIZE_MAX,
-                                    )
-                                    .clamp_to_range(true),
-                                );
-                            });
+                                ui.horizontal(|ui| {
+                                    ui.label("X");
+                                    ui.add(
+                                        Slider::new(
+                                            &mut current_photo_info.info.mole_metrics.center_x,
+                                            -MOLE_CENTER_DISTANCE_MAX..=MOLE_CENTER_DISTANCE_MAX,
+                                        )
+                                        .clamp_to_range(true),
+                                    );
+                                    ui.label("Y");
+                                    ui.separator();
+                                    ui.add(
+                                        Slider::new(
+                                            &mut current_photo_info.info.mole_metrics.center_y,
+                                            -MOLE_CENTER_DISTANCE_MAX..=MOLE_CENTER_DISTANCE_MAX,
+                                        )
+                                        .clamp_to_range(true),
+                                    );
+                                    ui.label("Size");
+                                    ui.separator();
+                                    ui.add(
+                                        Slider::new(
+                                            &mut current_photo_info.info.mole_metrics.diameter,
+                                            0.0..=MOLE_SIZE_MAX,
+                                        )
+                                        .clamp_to_range(true),
+                                    );
+                                    ui.separator();
+                                    if ui.button("Save").clicked() {
+                                        *save = true;
+                                    }
+                                });
+                            }
                         }
                     })
                 });
@@ -273,7 +328,7 @@ impl eframe::App for MyApp {
                                     }
 
                                     let drag = plot.pointer_coordinate_drag_delta();
-                                    if (drag[0] != 0.0 || drag[1] != 0.0) {
+                                    if drag[0] != 0.0 || drag[1] != 0.0 {
                                         let p2_x = px;
                                         let p2_y = py;
                                         let p1_x = px - drag[0];

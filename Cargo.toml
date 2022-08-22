@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+chrono = { version = "0.4.22", features = ["iana-time-zone", "oldtime", "std", "time", "serde"] }
 eframe = { version = "0.18.0", features = ["dark-light", "default_fonts"] }
 egui_extras = { version = "0.18.0", features = ["image"] }
 image = "0.24.3"
 rfd = "0.10.0"
 serde = {version = "1.0.143", features = ["std", "derive"]}
 serde_json = "1.0.83"
-

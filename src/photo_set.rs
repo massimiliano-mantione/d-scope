@@ -1,3 +1,4 @@
+use chrono::{Datelike, NaiveDateTime, Timelike};
 use eframe::epaint::ColorImage;
 use egui_extras::RetainedImage;
 use image::{load_from_memory, EncodableLayout};
@@ -287,4 +288,27 @@ pub struct PhotoSetData {
     pub time: std::time::SystemTime,
     pub notes: String,
     pub photos: BTreeMap<usize, PhotoInfo>,
+}
+
+pub struct DisplayTime(SystemTime);
+
+impl DisplayTime {
+    pub fn new(time: SystemTime) -> Self {
+        Self(time)
+    }
+}
+
+impl std::fmt::Display for DisplayTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let elapsed = self.0.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+        let time = NaiveDateTime::from_timestamp(elapsed.as_secs() as i64, 0);
+        f.write_fmt(format_args!(
+            "{:4}-{:2}-{:2} {:2}:{:2}",
+            time.year(),
+            time.month(),
+            time.day(),
+            time.time().hour(),
+            time.time().minute(),
+        ))
+    }
 }
