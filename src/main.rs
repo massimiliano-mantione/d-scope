@@ -216,8 +216,10 @@ impl eframe::App for MyApp {
                                     ui.text_edit_singleline(&mut photos.info.name);
                                 });
                                 ui.horizontal(|ui| {
-                                    ui.label("Notes");
+                                    ui.label("Visit notes");
                                     ui.text_edit_multiline(&mut photos.info.notes);
+                                    ui.label("Photo notes");
+                                    ui.text_edit_multiline(&mut current_photo_info.info.notes);
                                 });
                                 if !*edit_measures {
                                     if ui.button("Save").clicked() {
