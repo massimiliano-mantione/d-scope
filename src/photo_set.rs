@@ -254,6 +254,26 @@ impl PhotoSet {
         let mut data_path = self.path.clone();
         data_path.push(INFO_FILE_NAME);
         std::fs::write(&data_path, data).map_err(|error| {
+            DScopeError::cannot_remove_file(error, data_path.to_string_lossy().to_string())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn cleanup(&self, path: &PathBuf) -> DScopeResult<()> {
+        for photo in self.photos.iter() {
+            let mut path = path.clone();
+            path.push(photo_file_name(photo.id));
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|error| {
+                    DScopeError::cannot_remove_file(error, path.to_string_lossy().to_string())
+                })?;
+            }
+        }
+
+        let mut data_path = path.clone();
+        data_path.push(INFO_FILE_NAME);
+        std::fs::remove_file(&data_path).map_err(|error| {
             DScopeError::cannot_write_file(error, data_path.to_string_lossy().to_string())
         })?;
 

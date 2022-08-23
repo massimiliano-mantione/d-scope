@@ -20,13 +20,9 @@ use photo_set::{
 };
 
 fn main() {
-    let options = eframe::NativeOptions {
-        drag_and_drop_support: true,
-        ..Default::default()
-    };
     eframe::run_native(
-        "Native file dialogs and drag-and-drop files",
-        options,
+        "D-Scope",
+        Default::default(),
         Box::new(|_cc| Box::new(MyApp::default())),
     );
 }
@@ -41,6 +37,7 @@ enum DScopeUi {
         edit_measures: bool,
         edit_data: bool,
         save: bool,
+        cleanup: Option<PathBuf>,
     },
 }
 
@@ -85,6 +82,7 @@ impl eframe::App for MyApp {
                                 edit_measures: false,
                                 edit_data: false,
                                 save: false,
+                                cleanup: None,
                             };
                         }
                         Err(error) => {
@@ -116,6 +114,7 @@ impl eframe::App for MyApp {
                 edit_measures,
                 edit_data,
                 save,
+                cleanup,
             } => {
                 if *save {
                     *save = false;
@@ -124,6 +123,22 @@ impl eframe::App for MyApp {
                     } else {
                         *edit_measures = false;
                         *edit_data = false;
+                    }
+                }
+
+                if let Some(path) = cleanup.take() {
+                    if rfd::MessageDialog::new()
+                        .set_title("Notice")
+                        .set_description(&format!(
+                            "remove files at '{}'?",
+                            path.to_string_lossy().to_string()
+                        ))
+                        .set_buttons(rfd::MessageButtons::YesNo)
+                        .show()
+                    {
+                        if let Err(error) = photos.cleanup(&path) {
+                            self.status.error = Some(error);
+                        }
                     }
                 }
 
@@ -140,7 +155,9 @@ impl eframe::App for MyApp {
                                     let old_path = photos.path.clone();
                                     photos.path = new_path;
                                     match photos.save() {
-                                        Ok(_) => {}
+                                        Ok(_) => {
+                                            *cleanup = Some(old_path);
+                                        }
                                         Err(error) => {
                                             photos.path = old_path;
                                             self.status.error = Some(error);

@@ -8,6 +8,7 @@ pub enum DScopeError {
     ExpectedDirectory { path: String },
     CannotReadFile { error: IoError, file: String },
     CannotWriteFile { error: IoError, file: String },
+    CannotRemoveFile { error: IoError, file: String },
     CannotDecodeImage { error: ImageError, file: String },
     CannotCreateImage { error: String, file: String },
     CannotDecodeInfo { error: JsonError, file: String },
@@ -27,6 +28,9 @@ impl std::fmt::Display for DScopeError {
             }
             DScopeError::CannotWriteFile { error, file } => {
                 f.write_fmt(format_args!("Cannot write file {}: {}", file, error))
+            }
+            DScopeError::CannotRemoveFile { error, file } => {
+                f.write_fmt(format_args!("Cannot remove file {}: {}", file, error))
             }
             DScopeError::CannotDecodeImage { error, file } => {
                 f.write_fmt(format_args!("Cannot decode image {}: {}", file, error))
@@ -55,6 +59,9 @@ impl DScopeError {
     }
     pub fn cannot_write_file(error: IoError, file: String) -> Self {
         Self::CannotWriteFile { error, file }
+    }
+    pub fn cannot_remove_file(error: IoError, file: String) -> Self {
+        Self::CannotRemoveFile { error, file }
     }
     pub fn cannot_decode_image(error: ImageError, file: String) -> Self {
         Self::CannotDecodeImage { error, file }
