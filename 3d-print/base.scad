@@ -1,9 +1,10 @@
-inner = 20;
-block = 0.5;
-thick = 1.5;
+//inner = 32.05;
+inner = 32.50;
+block = 3.0;
+thick = 4.5;
 
 
-length = 10;
+length = 25;
 support = 4;
 
 outer = inner + thick;
